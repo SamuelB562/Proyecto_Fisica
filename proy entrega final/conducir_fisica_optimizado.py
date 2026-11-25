@@ -10,6 +10,7 @@ velocidades reales proceden de la telemetría de Assetto Corsa.
 """
 import argparse
 import math
+import csv  # Telemetría experimental cruda, independiente de los logs legibles.
 import statistics
 import time
 import numpy as np
@@ -34,7 +35,7 @@ VUELTAS_PREDETERMINADAS = 3
 PASADAS = 3
 MAX_CURVAS = 20
 UMBRAL_CURVA = 0.005
-MARGEN_BORDE_M = 0.15
+MARGEN_BORDE_M = 0.25
 MEJORA_MINIMA_S = 0.02
 # El estimador original exige un límite numérico finito; no limita vJoy.
 TOPE_EVALUADOR_M_S = 80.0
@@ -113,6 +114,27 @@ def evaluar(p, veh, v0):
 
 
 
+# La trayectoria incluye márgenes para planificar. Se mide SOLO la vuelta
+# central entre las estaciones delimitadas por la salida y meta de referencia.
+def tiempo_vuelta_plan(puntos, evaluacion, estaciones_centro, inicio, meta):
+    """Integra dt=2*ds/(v_i+v_f) dentro del intervalo real de la vuelta.
+
+    El mapeo centro/ruta se hace por índices homólogos de geometría; no
+    confundimos los 200 m de preparación ni el sufijo con tiempo de vuelta.
+    """
+    sr = estaciones(puntos)
+    a = float(np.interp(inicio, estaciones_centro, sr))
+    b = float(np.interp(meta, estaciones_centro, sr))
+    interiores = sr[(sr>a)&(sr<b)]
+    estaciones_vuelta = np.r_[a, interiores, b]
+    velocidades_vuelta = np.interp(estaciones_vuelta, sr,
+                                   evaluacion.velocidades_m_s)
+    denominadores = velocidades_vuelta[:-1]+velocidades_vuelta[1:]
+    if np.any(denominadores <= 1e-9):
+        return math.inf
+    return float(np.sum(2*np.diff(estaciones_vuelta)/denominadores))
+
+
 # Evalúa candidatos de trazada y conserva únicamente las modificaciones que mejoran el tiempo sujeto a restricciones.
 def optimizar(c, iz, de, veh, v0, s_inicio, s_fin):
     """Busca una línea rápida por toda la vuelta con ápices temprano/medio/tardío.
@@ -137,7 +159,9 @@ def optimizar(c, iz, de, veh, v0, s_inicio, s_fin):
     # Comprueba una condición para separar datos válidos y casos excepcionales.
     if mejor is None:
         raise ValueError('La línea central no es físicamente evaluable')
-    t_centro = float(mejor.tiempo_s)
+    # La puntuación del optimizador corresponde al tramo de vuelta, no al
+    # recorrido completo que incluye aproximadamente 200 m + 650 m extra.
+    t_centro = tiempo_vuelta_plan(c, mejor, s, s_inicio, s_fin)
 
     # B1. Curvas: filtrado para detección, NO para la evaluación física.
     k = curvaturas_de_puntos(c)
@@ -272,6 +296,8 @@ def optimizar(c, iz, de, veh, v0, s_inicio, s_fin):
                 continue
             mejor_curva = None
             evaluacion_curva = mejor
+            puntuacion_curva = tiempo_vuelta_plan(c+d[:, None]*normales,
+                                                   mejor, s, s_inicio, s_fin)
             etiqueta = None
             # Itera sobre las muestras o segmentos, conservando su orden de procesamiento.
             for tipo, corrimiento in posiciones:
@@ -288,12 +314,16 @@ def optimizar(c, iz, de, veh, v0, s_inicio, s_fin):
                                 continue
                             e = evaluar(ruta, veh, v0)
                             total += 1
-                            if e is None or e.tiempo_s >= evaluacion_curva.tiempo_s - MEJORA_MINIMA_S:
+                            if e is None:
+                                continue
+                            puntuacion = tiempo_vuelta_plan(ruta, e, s, s_inicio, s_fin)
+                            if puntuacion >= puntuacion_curva - MEJORA_MINIMA_S:
                                 continue
                             if not huella_cabe(ruta):
                                 rechazadas_huella += 1
                                 continue
                             mejor_curva, evaluacion_curva = d_nueva, e
+                            puntuacion_curva = puntuacion
                             etiqueta = (tipo, fi, fe, extension)
             # Comprueba una condición para separar datos válidos y casos excepcionales.
             if mejor_curva is not None:
@@ -302,13 +332,15 @@ def optimizar(c, iz, de, veh, v0, s_inicio, s_fin):
                 tipo, fi, fe, extension = etiqueta
                 print(f'Pasada {pasada+1}, curva {numero}: {tipo} | '
                       f'interior={fi:.0%}, exterior={fe:.0%}, '
-                      f'extensión={extension:.0f} m | T={mejor.tiempo_s:.3f} s')
+                      f'extensión={extension:.0f} m | T_vuelta={puntuacion_curva:.3f} s')
 
     ruta_final = c + d[:, None] * normales
     print(f'Evaluaciones físicas: {total}; mejoras aceptadas: {mejoras}; '
           f'rechazos por huella: {rechazadas_huella}')
-    print(f'Centro: {t_centro:.3f} s | Optimizada: {mejor.tiempo_s:.3f} s | '
-          f'Ganancia: {t_centro-mejor.tiempo_s:.3f} s')
+    tiempo_final_vuelta = tiempo_vuelta_plan(ruta_final, mejor, s, s_inicio, s_fin)
+    print(f'Centro (vuelta): {t_centro:.3f} s | '
+          f'Optimizada (vuelta): {tiempo_final_vuelta:.3f} s | '
+          f'Ganancia de vuelta: {t_centro-tiempo_final_vuelta:.3f} s')
     print(f'Desplazamiento lateral máximo: {np.max(np.abs(d)):.3f} m')
     return ruta_final, mejor
 
@@ -454,7 +486,7 @@ def main(vueltas=None):
     if not isinstance(vueltas, int) or isinstance(vueltas, bool) or vueltas < 1:
         raise ValueError("El número de vueltas debe ser un entero positivo")
 
-    mfis = mgraf = mando = None
+    mfis = mgraf = mando = archivo_csv = None
     tiempos_vueltas = []
     motivo_fin = "Finalización desconocida"
     # Protege recursos externos y permite limpieza ante errores.
@@ -488,9 +520,10 @@ def main(vueltas=None):
             potencia_util_w=p["potencia_maxima_telemetria"],
             distancia_ejes_m=p["distancia_ejes_m"],
             relacion_direccion=p["direccion_steer_ratio"],
-            aceleracion_max_m_s2= 6.35,
-            frenado_max_m_s2= 9.93,
-            coef_friccion=p["coef_friccion_modelo"]
+            # Los límites provienen de un único origen trazable (CSV o física).
+            aceleracion_max_m_s2=p['aceleracion_max_m_s2'],
+            frenado_max_m_s2=p['frenado_max_m_s2'],
+            coef_friccion= 1.23
         )
         
         print('Optimizando la vuelta completa antes de arrancar...')
@@ -572,6 +605,18 @@ def main(vueltas=None):
         input('ENTER para iniciar la conducción...')
         mando = ControladorVJoy()
         mando.reposo()
+        # E5a. Telemetría AC a frecuencia del control (~50 Hz nominales).
+        # El tiempo y la distancia empiezan en la posición inicial REAL de AC.
+        # Se conserva la proyección sobre el centro (misma referencia del modelo).
+        destino_csv = __import__('pathlib').Path(__file__).resolve().parent / 'datos' / 'telemetria_ac.csv'
+        destino_csv.parent.mkdir(parents=True, exist_ok=True)
+        archivo_csv = destino_csv.open('w', newline='', encoding='utf-8')
+        escritor_csv = csv.writer(archivo_csv)
+        escritor_csv.writerow(('time_s','distance_m','speed_kmh','speed_target_kmh',
+                               'gas','brake','steer','accG_0','accG_1','accG_2',
+                               'lateral_error_m','lap','status'))
+        archivo_csv.flush()
+        print(f'[COMPARADOR] TELEMETRIA_CSV {destino_csv}', flush=True)
         reloj = time.monotonic()
         instante_ultima_meta = reloj
         tiempos_vueltas = []
@@ -652,6 +697,18 @@ def main(vueltas=None):
             if not np.all(np.isfinite(list(controles.values()))):
                 raise ValueError('Control inválido')
             mando.enviar(**controles)
+            # E9a. Una muestra por ciclo, sin sustituir medidas por predicciones.
+            # ACCG son componentes locales en g; se guardan sin cambiar ejes.
+            escritor_csv.writerow((f'{t:.6f}', f'{recorrido:.6f}',
+                f'{float(f.speedKmh):.6f}', f'{objetivo*3.6:.6f}',
+                f'{float(f.gas):.6f}', f'{float(f.brake):.6f}',
+                f'{float(f.steerAngle):.6f}',
+                *(f'{float(a):.6f}' for a in f.accG),
+                f'{float(error_centro):.6f}', vueltas_completadas + 1,
+                int(g.status)))
+            # Flush periódico para que el servidor pueda graficar durante la vuelta.
+            if t - log_ultimo >= 0.5:
+                archivo_csv.flush()
             # Comprueba una condición para separar datos válidos y casos excepcionales.
             if t - log_ultimo >= 0.5:
                 log_ultimo = t
@@ -669,6 +726,9 @@ def main(vueltas=None):
         motivo_fin = f'ERROR: {type(ex).__name__}: {ex}'
         print(motivo_fin)
     finally:
+        # E10. Cerrar el registro aun si el conductor abandona o falla.
+        if archivo_csv is not None:
+            archivo_csv.close()
         # Comprueba una condición para separar datos válidos y casos excepcionales.
         if mando is not None:
             # Protege recursos externos y permite limpieza ante errores.

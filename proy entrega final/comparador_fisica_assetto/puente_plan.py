@@ -90,7 +90,12 @@ def main():
                 'longitud': float(s_fin - s_inicio),
                 'longitud_ruta': float(s_fin_ruta - s_inicio_ruta),
                 'vueltas_solicitadas': args.vueltas,  # None significa usar el predeterminado del conductor.
-                'tiempo_estimado_s': float(evaluacion.tiempo_s),
+                # Predicción del tramo completo disponible por separado.
+                'tiempo_estimado_recorrido_s': float(evaluacion.tiempo_s),
+                # Estimar únicamente la vuelta central interpolando el valor
+                # de velocidad en los cruces exactos de salida y meta.
+                'tiempo_estimado_s': float(globales['tiempo_vuelta_plan'](
+                    trayectoria, evaluacion, centro_s, s_inicio, s_fin)),
                 'vehiculo': {
                     'L': float(veh.distancia_ejes_m),
                     'masa': float(veh.masa_kg),
@@ -98,6 +103,8 @@ def main():
                     'mu': float(veh.coef_friccion),
                     'freno': float(veh.frenado_max_m_s2),
                     'aceleracion': float(veh.aceleracion_max_m_s2),
+                    'relacion_direccion': float(veh.relacion_direccion),
+                    'giro_ruedas_max_rad': float(veh.giro_ruedas_max_rad),
                 },
             }
 

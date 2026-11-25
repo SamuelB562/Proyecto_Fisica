@@ -90,6 +90,19 @@ def generar(datos: dict, destino: str | Path) -> dict:
     vuelta_modelo = datos.get('lap_times_model', [])
     vuelta_assetto = datos.get('lap_times_assetto', [])
     archivos = {}
+    plan = datos.get('plan')  # Perfil calculado, tercera señal distinta del conductor.
+    pc, pv, pk = np.array([]), np.array([]), np.array([])
+    if isinstance(plan, dict):
+        try:
+            sc = np.asarray(plan['s_centro'], dtype=float)
+            v = np.asarray(plan['v'], dtype=float)*3.6
+            k = np.asarray(plan['k'], dtype=float)
+            inicio, fin = float(plan['s_inicio']), float(plan['s_fin'])
+            validos = (sc >= inicio)&(sc <= fin)
+            if len(sc)==len(v)==len(k) and np.any(validos):
+                pc, pv, pk = sc[validos]-inicio, v[validos], k[validos]
+        except (KeyError, TypeError, ValueError):
+            pass
 
     # C1. Velocidad contra tiempo: fuentes cronometradas independientemente.
     mt, mv = serie(modelo, 'time', 'speed')
@@ -116,6 +129,8 @@ def generar(datos: dict, destino: str | Path) -> dict:
         if len(md): ax.plot(md, mvd, color='#4ed5da', label='Bicicleta (Python)', lw=1.8)
         # Comprueba una condición para separar datos válidos y casos excepcionales.
         if len(ad): ax.plot(ad, avd, color='#b681ff', label='Assetto Corsa (medida)', lw=1.8)
+        if len(pc): ax.plot(pc, pv, color='#fbbf24', ls='--', lw=1.25,
+                            label='Perfil predictivo del plan (no medido)')
         leyenda(ax)
         fig.savefig(destino/'velocidad_distancia.png', bbox_inches='tight')
         plt.close(fig)
@@ -136,6 +151,18 @@ def generar(datos: dict, destino: str | Path) -> dict:
             fig.savefig(destino/'diferencia_velocidad.png', bbox_inches='tight')
             plt.close(fig)
             archivos['diferencia_velocidad'] = 'diferencia_velocidad.png'
+
+    # C3a. Curvatura de la línea optimizada, en estaciones del centro común.
+    # Los picos corresponden a la discretización existente; no se suavizan
+    # aquí para no esconder problemas físicos de la geometría.
+    if len(pc) >= 3:
+        fig, ax = estilo('Curvatura del plan en Tocancipá',
+                         'Distancia sobre la línea central (m)', 'κ (1/m)')
+        ax.plot(pc, pk, color='#fbbf24', lw=1.2)
+        ax.axhline(0, color='#e2e8f0', lw=1, alpha=.5)
+        fig.savefig(destino/'curvatura_plan.png',bbox_inches='tight')
+        plt.close(fig)
+        archivos['curvatura_plan'] = 'curvatura_plan.png'
 
     # C4. Cronometría por vueltas: no fabricar una barra si la vuelta no existe.
     if vuelta_modelo or vuelta_assetto:

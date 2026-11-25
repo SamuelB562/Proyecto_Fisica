@@ -9,6 +9,7 @@ Se conserva el comparador web; el overlay se gestiona desde Assetto Corsa.
 """
 from __future__ import annotations
 import argparse
+import csv  # Lee registros de telemetría AC a frecuencia de control.
 import json
 import math
 import re
@@ -223,6 +224,9 @@ def model_run(vueltas):
             frenado_max_m_s2=float(parametros['freno']),
 
             aceleracion_max_m_s2=float(parametros['aceleracion']),
+            # Igualar también la dirección que utilizó el plan exportado.
+            relacion_direccion=float(parametros.get('relacion_direccion',15.0)),
+            giro_ruedas_max_rad=float(parametros.get('giro_ruedas_max_rad', math.radians(30.0))),
 
         )
         # Comprueba una condición para separar datos válidos y casos excepcionales.
@@ -243,20 +247,34 @@ def model_run(vueltas):
         # Comprueba una condición para separar datos válidos y casos excepcionales.
         if len(perfil) != len(ruta) or len(curv) != len(ruta):
             raise ValueError('Longitud incompatible entre ruta y perfil físico')
-        # C3. Comenzar por el PRIMER punto del plan compartido.
-        # Antes se iniciaba en inicio_total (línea de vuelta), saltándose
-        # el prefijo que el conductor de Assetto recorre desde ruta[0].
-        # No se invierte la ruta: se respeta su orden y sentido original.
-        ix = 0
-        tangente = ruta[1] - ruta[0]
+        # C3. Condiciones iniciales COMPARABLES: ambos automóviles arrancan
+        # detenidos en la salida real de la sesión, no 200 m antes en el prefijo.
+        # El prefijo se conserva dentro del plan para evaluar la optimización,
+        # pero NO constituye un recorrido ni una vuelta del comparador.
+        ix = int(np.clip(np.searchsorted(s, inicio_total), 0, len(s)-2))
+        tangente = ruta[ix+1] - ruta[ix]
         psi = math.atan2(float(tangente[1]), float(tangente[0]))
-        estado = Estado(float(ruta[0, 0]), float(ruta[0, 1]), psi, 0.0, 0.0)
-        avance = 0.0
+        estado = Estado(float(ruta[ix,0]), float(ruta[ix,1]), psi, 0.0, 0.0)
+        avance = float(inicio_total)
+        # C3a. Misma referencia espacial: ambos progresos se proyectan
+        # sobre la geometría central, NO sobre longitudes de líneas diferentes.
+        centro_base = np.asarray(plan['centro'], dtype=float)
+        if vueltas == 1:
+            centro_total, inicio_centro = centro_base, float(plan['s_inicio'])
+        else:
+            centro_total, inicio_centro, _ = repetir_vuelta(
+                centro_base, float(plan['s_inicio']), float(plan['s_fin']), vueltas)
+        sc_total = estaciones(centro_total)
+        if len(centro_total) != len(ruta):
+            raise ValueError('La correspondencia centro/ruta por índice no es válida')
+        # La progresión central también es monótona para conservar el número
+        # de vuelta cuando se repiten las mismas coordenadas XY.
+        avance_centro = float(inicio_centro)
         elapsed = 0.0
         dt = 0.02
         ultimo = -1.0
         vueltas_completadas = 0
-        inicio_ultima_vuelta = None  # Cronómetro de vuelta comienza en la línea de salida.
+        inicio_ultima_vuelta = 0.0  # Ambos parten detenidos desde la salida de referencia.
         lap_times = []
         s_prev = avance
         t_prev = 0.0
@@ -280,15 +298,27 @@ def model_run(vueltas):
             idx = lo + j
             prog = float(s[idx] + tt[j]*(s[idx+1]-s[idx]))
             avance = max(avance, prog)
+            # C4a. Proyectar el vehículo modelo REAL sobre la misma línea central
+            # usada por el conductor de Assetto Corsa. La búsqueda se restringe
+            # alrededor del índice homólogo para no saltar entre vueltas.
+            ci0 = max(0, idx-12)
+            ci1 = min(len(centro_total)-2, idx+12)
+            ca = centro_total[ci0:ci1+1]
+            cb = centro_total[ci0+1:ci1+2]
+            segmento = cb-ca
+            norma2 = np.maximum(np.sum(segmento*segmento,axis=1),1e-9)
+            t_c = np.clip(np.sum((xy-ca)*segmento,axis=1)/norma2,0,1)
+            pies_c = ca+t_c[:,None]*segmento
+            j_c = int(np.argmin(np.sum((pies_c-xy)**2,axis=1)))
+            estacion_centro = float(sc_total[ci0+j_c]
+                       + t_c[j_c]*(sc_total[ci0+j_c+1]-sc_total[ci0+j_c]))
+            avance_centro = max(avance_centro, estacion_centro)
             error = math.sqrt(float(errs[j]))
             # Comprueba una condición para separar datos válidos y casos excepcionales.
             if error > 22:
                 raise RuntimeError(f'Error lateral excesivo: {error:.2f} m')
-            # C5. El primer tramo (desde ruta[0] hasta inicio_total) es
-            # acercamiento, NO parte del tiempo de la primera vuelta.
-            if inicio_ultima_vuelta is None and s_prev <= inicio_total <= avance:
-                frac_inicio = (inicio_total-s_prev) / max(avance-s_prev, 1e-9)
-                inicio_ultima_vuelta = t_prev + float(np.clip(frac_inicio, 0, 1))*(elapsed-t_prev)
+            # C5. No se cronometra el prefijo de aproximación: el experimento
+            # parte en la salida y sus relojes arrancan en cero.
             # Cronometraje de cada meta por interpolación temporal.
             while vueltas_completadas < vueltas and avance >= metas[vueltas_completadas]:
                 meta = float(metas[vueltas_completadas])
@@ -328,13 +358,10 @@ def model_run(vueltas):
             # No mezclar este índice gráfico con la estación multivuelta.
             if elapsed-ultimo >= .075:
                 ultimo = elapsed
-                dist = max(0., avance-inicio_total)
-                # Mientras se acerca a la salida, mostrar el prefijo REAL.
-                # Tras cruzarla, reutilizar una vuelta base sin invertirla.
-                if avance < inicio_total:
-                    s_base = avance
-                else:
-                    s_base = inicio_base + (avance-inicio_total) % (fin_base-inicio_base)
+                dist = max(0., avance_centro-inicio_centro)
+                # Visualización en el mismo índice de ruta, con cronómetro
+                # y distancia común basados en las estaciones del centro.
+                s_base = inicio_base + (avance-inicio_total) % (fin_base-inicio_base)
                 idx_base = int(np.clip(np.searchsorted(sb, s_base)-1, 0, len(base)-2))
                 setstate('model', time=round(elapsed, 3),
                          speed=round(estado.velocidad_m_s*3.6, 2),
@@ -486,6 +513,10 @@ def run_assetto(vueltas):
         # Comprueba una condición para separar datos válidos y casos excepcionales.
         if vueltas is not None:
             cmd.extend(['--vueltas', str(vueltas)])
+        # F0. Nunca mezclar telemetría del ensayo anterior con el actual.
+        csv_anterior = ARGS.script.parent / 'datos' / 'telemetria_ac.csv'
+        if csv_anterior.exists():
+            csv_anterior.unlink()
         process = subprocess.Popen(cmd, cwd=str(ARGS.script.parent),
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, encoding='utf-8',
@@ -645,6 +676,34 @@ def parametros_fisicos():
         pass
     return datos
 # Genera imágenes a partir de muestras registradas y evita recalcularlas demasiado seguido.
+def cargar_telemetria_ac():
+    """G0a. Leer muestras LIVE de AC sin interpolarlas a frecuencia ficticia.
+
+    Se omiten las muestras incompletas mientras el conductor escribe el CSV.
+    Los logs de 2 Hz permanecen disponibles como respaldo identificado.
+    """
+    if ARGS is None:
+        return []
+    archivo = ARGS.script.parent / 'datos' / 'telemetria_ac.csv'
+    if not archivo.is_file():
+        return []
+    muestras = []
+    try:
+        with archivo.open(newline='', encoding='utf-8') as f:
+            for fila in csv.DictReader(f):
+                try:
+                    t = float(fila['time_s'])
+                    d = float(fila['distance_m'])
+                    v = float(fila['speed_kmh'])
+                except (KeyError, ValueError, TypeError):
+                    continue
+                if all(math.isfinite(x) for x in (t,d,v)) and d >= 0:
+                    muestras.append({'time':t, 'distance':d, 'speed':v})
+    except OSError:
+        return []
+    return muestras
+
+
 def generar_graficas_api():
     """Generar PNG a demanda, como máximo cada 4 s, sin bloquear la telemetría."""
     with GRAFICAS_LOCK:
@@ -657,6 +716,13 @@ def generar_graficas_api():
             datos = {'model': list(HISTORIAL['model']), 'assetto': list(HISTORIAL['assetto']),
                      'lap_times_model': list(STATE['model'].get('lap_times') or []),
                      'lap_times_assetto': list(STATE['assetto'].get('lap_times') or [])}
+        # Datos AC registrados por tick tienen prioridad sobre el log cada 0.5 s.
+        # Si aún no hay muestras completas, permanecen los datos de respaldo.
+        alta_frecuencia = cargar_telemetria_ac()
+        if alta_frecuencia:
+            datos['assetto'] = alta_frecuencia
+        # Mantener las tres series separadas: perfil, bicicleta y AC.
+        datos['plan'] = load_plan()
         from graficas_comparacion import generar
         resultado = generar(datos, GRAFICAS)
         estampilla = int(time.time()*1000)

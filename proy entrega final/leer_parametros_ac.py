@@ -7,6 +7,7 @@ la lógica preexistente; los límites estimados no son mediciones directas de AC
 
 from pathlib import Path
 from configparser import ConfigParser
+import csv  # Estadística ponderada de las muestras experimentales guardadas.
 import re
 
 from telemetria_assetto import (
@@ -67,6 +68,41 @@ def buscar_compuesto(ini, nombre_activo):
     raise ValueError(
         f"No se encontró el compuesto: {nombre_activo}"
     )
+
+
+# C1. CALIBRACIÓN: UNA ÚNICA FUENTE DE LÍMITES EXPERIMENTALES.
+# La carpeta identifica la medición concreta; NO se aplica a otros automóviles.
+RUTA_CALIBRACION = (Path(__file__).resolve().parent / 'medicion_ac_vjoy'
+                    / '20261125_133617' / 'resumen_por_velocidad.csv')
+AUTO_CALIBRADO = 'jw_porsche_991.2_gt2_rs_us'
+COMPUESTO_CALIBRADO = 'hypercar road (hr)'
+
+def limites_experimentales(auto, compuesto):
+    """Promedio ponderado por número de muestras de cada intervalo de velocidad.
+
+    Una sola prueba 0–121 km/h no permite afirmar límites para 187 km/h.
+    Se usa como aproximación CONSTANTE del modelo, no extrapolación validada.
+    """
+    if auto != AUTO_CALIBRADO or compuesto.lower() != COMPUESTO_CALIBRADO:
+        return None
+    if not RUTA_CALIBRACION.is_file():
+        raise FileNotFoundError(f'Falta la calibración declarada: {RUTA_CALIBRACION}')
+    acumulados = {'acelerando': [0.0, 0], 'frenando': [0.0, 0]}
+    with RUTA_CALIBRACION.open(encoding='utf-8-sig', newline='') as archivo:
+        for fila in csv.DictReader(archivo):
+            tipo = fila.get('tipo')
+            if tipo not in acumulados:
+                continue
+            n = int(fila['muestras'])
+            a = float(fila['aceleracion_media_m_s2'])
+            if n <= 0 or not 0 < a < 35:
+                raise ValueError('Datos de calibración inválidos')
+            acumulados[tipo][0] += a*n
+            acumulados[tipo][1] += n
+    if any(n == 0 for _,n in acumulados.values()):
+        raise ValueError('Calibración sin muestras suficientes en alguna fase')
+    return (acumulados['acelerando'][0] / acumulados['acelerando'][1],
+            acumulados['frenando'][0] / acumulados['frenando'][1])
 
 
 # D. OBTENER LOS PARÁMETROS
@@ -144,6 +180,14 @@ def obtener_parametros():
         # Usamos el más restrictivo de ambos.
         frenado_max = min(frenado_mecanico, frenado_agarre)
 
+        # G0. Preferir límites experimentales cuando corresponden al coche
+        # y compuesto activos. La fuente es el CSV, nunca números duplicados.
+        experimento = limites_experimentales(auto, compuesto)
+        fuente_limites = 'física idealizada (sin calibración del coche)'
+        if experimento is not None:
+            aceleracion_max, frenado_max = experimento
+            fuente_limites = f'ensayo único ponderado: {RUTA_CALIBRACION.name}'
+
         # G. PARÁMETROS EXTRAÍDOS
         return {
             "automovil": auto,
@@ -191,6 +235,7 @@ def obtener_parametros():
             "frenado_max_m_s2": frenado_max,
             "coef_friccion_modelo": mu_lat,
             "frenado_mecanico_m_s2": frenado_mecanico,
+            "origen_limites": fuente_limites,
         }
 
     finally:
