@@ -1,0 +1,261 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Comparador físico · Tocancipá</title><style>
+:root{color-scheme:dark;--bg:#0d111b;--panel:#181e2a;--line:#343e53;--violet:#b681ff;--cyan:#4ed5da;--muted:#aebad1}*{box-sizing:border-box}body{margin:0;background:var(--bg);font:14px system-ui,Segoe UI,sans-serif;color:#f6f7fb}header{padding:17px 20px 10px}h1{font-size:21px;margin:0}header p{color:var(--muted);margin:4px 0}.bar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px 16px}button,select,input{border:1px solid #505c73;border-radius:7px;background:#252e40;color:white;padding:8px 10px;font:inherit}button{cursor:pointer}button:hover{background:#37435a}button.primary{background:#6242a7}.active{outline:2px solid var(--violet)}.bar label{color:#c2cee0}.bar input[type=number]{width:73px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 10px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0}.panel h2{font-size:15px;margin:0;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}.status{font-size:12px;color:#b8c8e1;font-weight:400}.view{width:100%;aspect-ratio:16/9;position:relative;background:#0d1925;overflow:hidden}.view canvas{width:100%;height:100%;display:block}.right-view{display:flex;align-items:center;justify-content:center;background:repeating-linear-gradient(135deg,#17202e,#17202e 25px,#1c2735 26px);padding:25px;text-align:center}.placeholder{max-width:370px;color:#c5d0e5}.placeholder p{font-size:12px;line-height:1.6}.tele{position:absolute;top:12px;left:12px;background:#101724db;border:1px solid #536079aa;border-radius:9px;padding:10px 13px;min-width:180px;font-size:12px;pointer-events:none}.tele strong{display:block;margin-bottom:6px}.tele div{display:flex;justify-content:space-between;gap:15px;margin-top:5px}.tele b{color:#e3eeff;font-variant-numeric:tabular-nums}.wheels{position:absolute;right:10px;top:10px;width:116px;height:180px;background:#101724d9;border:1px solid #51627b;border-radius:9px;padding:7px;text-align:center;font-size:11px;pointer-events:none}.wheels svg{width:100%;height:145px;display:block}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px}.stat{min-width:0;border:1px solid #303c51;background:#101625;border-radius:6px;padding:9px}.stat small{display:block;color:#a6b5cc}.stat b{font-size:16px;font-variant-numeric:tabular-nums}.footnote{padding:0 12px 12px;color:#b5c0d1;font-size:12px;min-height:40px}.bottom{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px}.info{padding:12px;border:1px solid var(--line);background:var(--panel);border-radius:9px;min-width:0}.info h3{margin:0 0 8px;font-size:14px}.path{font:12px ui-monospace,monospace;color:#d0c0ff;overflow-wrap:anywhere}.logs{font:11px ui-monospace,monospace;white-space:pre-wrap;max-height:120px;overflow:auto;background:#0a101a;border-radius:5px;padding:9px;color:#bed3e2}.msg{font-size:12px;color:#ccd9ed;line-height:1.55}.warn{color:#ffd58a}.winner{font-weight:750;color:#e9caff;padding-top:10px}@media(max-width:1050px){.grid,.bottom{grid-template-columns:1fr}}
+</style><style>
+
+.mirror-toggle{display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid #a78bfa;border-radius:7px;background:#302744;color:#f3eaff;font-weight:600;white-space:nowrap;cursor:pointer}.mirror-toggle input{margin:0;accent-color:#b681ff}
+/* I. Panel experimental: mantiene intactos los dos simuladores existentes. */
+.experimental{padding:10px;display:grid;gap:10px}
+.experimental .infobox{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.phys-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:9px;margin:12px 0}
+.phys-item{background:#101625;border:1px solid #303c51;border-radius:7px;padding:11px}
+.phys-item small{color:#a6b5cc;display:block;margin-bottom:6px}
+.phys-item b{font-size:17px;font-variant-numeric:tabular-nums}
+.graph-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.graph-card{background:#101625;border:1px solid #303c51;border-radius:8px;padding:8px;min-width:0}
+.graph-card img{display:block;width:100%;height:auto;border-radius:5px}
+.graph-card h3{font-size:13px;margin:5px 7px 9px}
+@media(max-width:1050px){.graph-grid{grid-template-columns:1fr}}
+/* Corrección visual opcional: refleja ambas representaciones del modelo, sin alterar coordenadas ni física. */
+#world.vista-espejo,#bike.vista-espejo{transform:scaleX(-1)}
+
+</style>
+</head><body>
+<header><h1>Comparador de trayectoria · Modelo bicicleta vs Assetto Corsa</h1><p>Física A · Tocancipá · Trayectoria optimizada compartida · Relojes independientes · Mediciones reales separadas de las predicciones</p></header>
+<div class="bar"><label>Vueltas <input id="laps" type="number" min="1" max="100" value="3" step="1" title="Vueltas consecutivas"></label><button class="primary" onclick="both()">▶ Iniciar ambos</button><button onclick="startAssetto()">▶ Solo Assetto</button><button onclick="startModel()">▶ Solo modelo</button><button onclick="post('/api/stop-model')">■ Detener modelo</button><button id="chase" class="active" onclick="setView('chase')">Vista 1 · Exterior</button><button id="cockpit" onclick="setView('cockpit')">Vista 2 · Interior</button><label class="mirror-toggle" title="Invierte solo la imagen horizontal de la pista y la bicicleta; no cambia la ruta ni la física"><input id="mirrorView" type="checkbox" checked onchange="setMirrorView(this.checked)"> ↔ Reflejar pista (vista)</label><label>Escala perspectiva <input id="fov" type="range" min="0.70" max="1.40" value="1" step="0.05"></label></div>
+<div class="grid">
+<section class="panel"><h2>Simulador propio · Bicicleta cinemática <span id="modelStatus" class="status">listo</span></h2><div class="view"><canvas id="world"></canvas><div class="tele"><strong>Modelo de dos ruedas</strong><div><span>Velocidad</span><b id="mvel">—</b></div><div><span>Dirección δ</span><b id="mdel">—</b></div><div><span>Aceleración lateral</span><b id="may">—</b></div><div><span>Error lateral</span><b id="merr">—</b></div><div><span>Vueltas</span><b id="mlaps">—</b></div><div><span>Última vuelta</span><b id="mlast">—</b></div></div><div class="wheels"><strong>Vista superior</strong><svg id="bike" viewBox="0 0 105 138"><line x1="52" y1="7" x2="52" y2="131" stroke="#63748b" stroke-dasharray="3 4"/><rect x="35" y="23" width="34" height="98" rx="11" fill="#42546944" stroke="#71839e" stroke-width="1.4"/><line x1="52" y1="42" x2="52" y2="108" stroke="#59d9dc" stroke-width="3"/><rect x="46" y="96" width="12" height="25" rx="3" fill="#63cbda"/><g id="frontWheel" transform="translate(52 36) rotate(0)"><rect x="-6" y="-13" width="12" height="26" rx="3" fill="#bb8bff" stroke="#fff" stroke-width="1"/></g><text x="72" y="36" fill="#cdb0ff" font-size="10">δ</text></svg></div></div><div class="stats"><div class="stat"><small>Tiempo propio</small><b id="mt">—</b></div><div class="stat"><small>Velocidad</small><b id="ms">—</b></div><div class="stat"><small>Avance</small><b id="md">—</b></div><div class="stat"><small>Estado</small><b id="mst">listo</b></div></div><div class="footnote">Perspectiva 3D esquemática de la pista real. Se integra <code>paso_bicicleta()</code> con dos ruedas, sobre los puntos optimizados exportados por el script original.</div></section>
+<section class="panel"><h2>Assetto Corsa · Ventana real y telemetría <span id="assettoStatus" class="status">listo</span></h2><div class="view right-view"><div class="placeholder"><strong>Assetto Corsa se ejecuta en su propia ventana</strong><p>La interfaz registra los datos disponibles de la ejecución y los compara con nuestro modelo de bicicleta. La visualización dentro del juego se gestiona con la app de Assetto Corsa, no desde este navegador.</p></div><div class="tele"><strong>Assetto real</strong><div><span>Velocidad</span><b id="avel">—</b></div><div><span>Tiempo</span><b id="at">—</b></div><div><span>Recorrido</span><b id="ad">—</b></div><div><span>Estado</span><b id="ast">—</b></div><div><span>Vueltas</span><b id="alaps">—</b></div><div><span>Última vuelta</span><b id="alast">—</b></div></div></div><div class="stats"><div class="stat"><small>Tiempo real</small><b id="at2">—</b></div><div class="stat"><small>Velocidad</small><b id="as">—</b></div><div class="stat"><small>Avance</small><b id="ap">—</b></div><div class="stat"><small>Estado</small><b id="ast2">listo</b></div></div><div class="footnote" id="assettoSource">Velocidad y tiempo reales deben provenir de la telemetría de Assetto Corsa, no del JSON del plan. La visualización dentro de Assetto Corsa se realiza mediante la app instalada en el juego.</div></section></div>
+<div class="bottom"><section class="info"><h3>Geometría y comparación</h3><div id="geo" class="msg warn">Esperando la trayectoria calculada por conducir_fisica_optimizado.py. No se usa el JSON de prueba.</div><div id="script" class="path">Script original: ../conducir_fisica_optimizado.py</div><div id="winner" class="winner">Sin vueltas completadas.</div><div id="err" class="msg warn"></div></section><section class="info"><h3>Registro de Assetto Corsa</h3><div class="logs" id="logs">Esperando.</div></section></div>
+<!-- I. Parámetros y gráficas generadas por Python (matplotlib). -->
+<section class="experimental">
+  <div class="infobox">
+    <h2>Parámetros físicos usados por nuestro modelo</h2>
+    <p id="phys-source" class="msg warn">Esperando el plan de conducción que contiene los parámetros realmente usados por el optimizador.</p>
+    <p class="msg">Sesión actual de AC: <strong id="ph-car">—</strong> · Neumáticos: <strong id="ph-tyres">—</strong>. <span id="ph-live-note"></span></p>
+    <div class="phys-grid">
+      <div class="phys-item"><small>Masa del vehículo</small><b id="ph-mass">—</b></div>
+      <div class="phys-item"><small>Peso estimado (mg)</small><b id="ph-weight">—</b></div>
+      <div class="phys-item"><small>Adherencia lateral de referencia μ</small><b id="ph-mu">—</b></div>
+      <div class="phys-item"><small>Distancia entre ejes</small><b id="ph-l">—</b></div>
+      <div class="phys-item"><small>Potencia usada por el modelo (kW)</small><b id="ph-power">—</b></div>
+      <div class="phys-item"><small>Frenado máximo estimado del modelo</small><b id="ph-brake">—</b></div>
+      <div class="phys-item"><small>Aceleración máxima estimada del modelo</small><b id="ph-accel">—</b></div>
+      <div class="phys-item"><small>Tiempo estimado inicial</small><b id="ph-tpre">—</b></div>
+    </div>
+    <p class="msg">La masa, distancia entre ejes y adherencia son parámetros configurados en el automóvil. Aceleración y frenado son límites calculados por el modelo, no máximos medidos. La potencia mostrada es el valor que utiliza el modelo; no está verificado que equivalga a potencia efectiva en ruedas.</p>
+  </div>
+  <div class="infobox">
+    <h2>Gráficas experimentales generadas con Python</h2>
+    <p class="msg">Las curvas se construyen a partir de muestras registradas durante las ejecuciones. Los relojes son independientes; para comparar ambas velocidades es preferible utilizar la distancia acumulada.</p>
+    <button onclick="actualizarGraficas(true)">Actualizar gráficas</button>
+    <span id="graph-status" class="status">Esperando datos de conducción...</span>
+    <div id="graph-grid" class="graph-grid" style="margin-top:12px"></div>
+  </div>
+</section>
+<script>
+// DOCUMENTACIÓN DE LA VISTA: el navegador proyecta la ruta compartida en 2D;
+// el giro y la velocidad dibujados proceden del simulador independiente.
+// La cámara puede reflejarse por presentación, sin modificar la geometría
+// del plan, las órdenes del conductor ni las mediciones de Assetto Corsa.
+
+let P=null,S=null,camera='chase',planReady=false,root=document.querySelector('#world'),ctx=root.getContext('2d'),lastPlanFetch=0;
+const $=id=>document.getElementById(id), val=(x,s='')=>Number.isFinite(x)?x.toFixed(1)+s:'—';
+function clock(x){if(!Number.isFinite(x))return '—';return `${Math.floor(x/60)}:${(x%60).toFixed(2).padStart(5,'0')}`}
+// Alterna cámara exterior/interior; no altera el estado físico.
+function setView(v){camera=v;$('chase').classList.toggle('active',v==='chase');$('cockpit').classList.toggle('active',v==='cockpit');paint()}
+// Ajuste de visualización, no modifica la geometría física ni los movimientos de ningún automóvil.
+function setMirrorView(enabled){root.classList.toggle('vista-espejo',enabled);$('bike').classList.toggle('vista-espejo',enabled);paint()}
+
+async function post(uri,body={}){try{const r=await fetch(uri,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let j=await r.json();if(j.ok===false)$('err').textContent=j.message||j.error||'Error';return j}catch(e){$('err').textContent=e.message}}
+// A. Vueltas: la interfaz manda el mismo número al endpoint del simulador real.
+// El servidor debe reenviar ese campo a puente_plan.py como --vueltas N.
+function requestedLaps(){
+  const n=Number($('laps').value);
+  if(!Number.isSafeInteger(n)||n<1||n>100){
+    $('err').textContent='Indica entre 1 y 100 vueltas';return null;
+  }
+  return n;
+}
+async function startAssetto(){
+  const vueltas=requestedLaps();if(vueltas===null)return;
+  const resultado=await post('/api/start-assetto',{vueltas});
+  // No se presenta como confirmado hasta que el servidor lo informe.
+  if(resultado&&!resultado.ok&&resultado.message)$('err').textContent=resultado.message;
+}
+async function startModel(){const vueltas=requestedLaps();if(vueltas===null)return;await post('/api/start-model',{vueltas})}
+async function both(){const vueltas=requestedLaps();if(vueltas===null)return;
+  await post('/api/start-assetto',{vueltas});await post('/api/start-model',{vueltas})}
+
+// B. Separación de señales: las predicciones son P.v y el estado real es S.assetto.
+// Se aceptan nombres equivalentes comunes, pero NO se sustituye una medición
+// real faltante por el perfil de velocidades estimadas.
+function measured(obj,fields){for(const k of fields){const raw=obj?.[k];if(raw!==null&&raw!==undefined&&raw!==''&&Number.isFinite(Number(raw)))return Number(raw)}return NaN}
+// Actualiza métricas DOM sin confundir predicción del plan con datos medidos.
+function update(){
+ if(!S)return;
+ const m=S.model||{},a=S.assetto||{};
+ const mv=measured(m,['speed','speed_kmh']), av=measured(a,['speed','speed_kmh','speedKmh']);
+ const mt=measured(m,['time','time_s']), at=measured(a,['time','time_s','elapsed_s']);
+ const md=measured(m,['distance','distance_m']), ad=measured(a,['distance','distance_m','progress_m']);
+ $('modelStatus').textContent=m.status||'—';$('assettoStatus').textContent=a.status||'—';
+ $('mvel').textContent=val(mv,' km/h');$('mdel').textContent=val(measured(m,['delta']),'°');
+ $('may').textContent=val(measured(m,['accel_lat']),' m/s²');$('merr').textContent=val(measured(m,['error_lateral']),' m');
+ $('mt').textContent=clock(mt);$('ms').textContent=val(mv,' km/h');$('md').textContent=val(md,' m');$('mst').textContent=m.status||'—';
+ $('avel').textContent=val(av,' km/h');$('at').textContent=clock(at);$('ad').textContent=val(ad,' m');$('ast').textContent=a.status||'—';
+ $('at2').textContent=clock(at);$('as').textContent=val(av,' km/h');$('ap').textContent=val(ad,' m');$('ast2').textContent=a.status||'—';
+ const completed=measured(a,['laps_completed','vueltas_completadas','laps']);
+ const total=measured(a,['laps_requested','vueltas_solicitadas']);
+ $('alaps').textContent=Number.isFinite(completed)?`${completed}${Number.isFinite(total)?'/'+total:''}`:'—';
+ const cm=measured(m,['laps_completed']);const tm=measured(m,['laps_requested']);
+ $('mlaps').textContent=Number.isFinite(cm)?`${cm}${Number.isFinite(tm)?'/'+tm:''}`:'—';
+ $('mlast').textContent=clock(measured(m,['last_lap_s']));
+ $('alast').textContent=clock(measured(a,['last_lap_s']));
+ $('logs').textContent=(a.logs||[]).slice(-15).join('\n')||a.message||'Esperando';
+ // En SVG el eje Y crece hacia abajo: invertir solo el signo visual de δ.
+  $('frontWheel').setAttribute('transform',`translate(52 36) rotate(${-(Number(m.delta)||0)})`);
+ if(m.status==='completado'&&a.status==='completado'&&Number.isFinite(mt)&&Number.isFinite(at))
+   $('winner').textContent=`Primero: ${mt<at?'MODELO':'ASSETTO'} | diferencia: ${Math.abs(mt-at).toFixed(2)} s`;
+ else if(m.status==='completado'||a.status==='completado')
+   $('winner').textContent=`${m.status==='completado'?'Modelo':'Assetto'} completó; esperando la otra prueba.`;
+ else $('winner').textContent='Sin pruebas completadas.';
+ if(m.status==='error')$('err').textContent=m.message||'';
+ else if(a.status==='error')$('err').textContent=a.message||'';
+ // C. Diagnóstico: una ausencia de datos reales NO debe parecer un cero medido.
+ $('assettoSource').title=Number.isFinite(av)?`Origen: ${a.telemetry_source||'registro del conductor'}`:'El servidor no entregó velocidad real. Revisar conexión de telemetría';
+}
+// Modelo visual: exactamente dos ruedas, ambas apoyadas en z=0 de la pista.
+// La geometría se proyecta con LA MISMA cámara que dibuja el asfalto.
+// Dibuja la bicicleta esquemática usando el estado real del modelo cinemático.
+function drawBikeGround(project,pose,hd,w,h){
+  const m=S.model||{},delta=(Number(m.delta)||0)*Math.PI/180;
+  const forward=[Math.cos(hd),Math.sin(hd)],side=[-Math.sin(hd),Math.cos(hd)];
+  const ground=(longitud,lateral)=>[pose[0]+forward[0]*longitud+side[0]*lateral,pose[1]+forward[1]*longitud+side[1]*lateral];
+  const point=(x,y)=>project(ground(x,y));
+  const drawLine=(a,b,color,width=2)=>{if(!a||!b)return;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke();};
+  const surface=(pts,fill,stroke)=>{
+    const pp=pts.map(q=>point(q[0],q[1]));if(pp.some(q=>!q))return;
+    ctx.beginPath();pp.forEach((q,i)=>i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]));ctx.closePath();
+    ctx.fillStyle=fill;ctx.fill();if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1.5;ctx.stroke();}
+  };
+  // Carrocería simbólica, sin inventar cuatro ruedas. Medidas en metros.
+  surface([[-.60,-.60],[-.60,.60],[3.35,.60],[3.35,-.60]],'#142b3880','#8fc9da99');
+  const L=Number(P?.vehiculo?.L)||2.6;
+  drawLine(point(0,0),point(L,0),'#89dbe7',Math.max(2,w*.004));
+  // Un neumático físico se aproxima por un cuadrilátero EN EL SUELO;
+  // el ancho/longitud visual cambian por perspectiva, no por píxeles fijos.
+  function wheel(cx,angle,color){
+    const c=Math.cos(angle),q=Math.sin(angle),L=1.12,W=.43;
+    const turn=(u,v)=>[cx+u*c-v*q,u*q+v*c];
+    surface([turn(-L/2,-W/2),turn(-L/2,W/2),turn(L/2,W/2),turn(L/2,-W/2)],color,'#edf5ff');
+    drawLine(point(...turn(-L*.27,0)),point(...turn(L*.27,0)),'#ffffffa0',1);
+  }
+  wheel(0,0,'#50d3d7');
+  wheel(L,delta,'#ad76ff');
+  drawLine(point(-.8,0),point(4.6,0),'#e8ffff66',1);
+  const front=point(L,0);
+  if(front){ctx.font='bold 12px system-ui';ctx.fillStyle='#d8bdff';ctx.textAlign='left';ctx.fillText('δ '+(Number(m.delta)||0).toFixed(1)+'°',Math.min(w-90,front[0]+14),front[1]-12);}
+}
+// Cockpit deliberadamente esquemático: no pretende reproducir el Porsche.
+// El volante rota según δ y la relación de dirección del vehículo del plan.
+function drawCockpit(w,h){
+  const delta=Number(S?.model?.delta)||0;
+  const relacion=Number(P?.vehiculo?.relacion_direccion)||12;
+  const steeringAngle=Math.max(-460,Math.min(460,delta*relacion))*Math.PI/180;
+  const dashTop=h*.71,cy=h*.96,cx=w*.43,r=Math.min(w*.19,h*.23);
+  ctx.save();
+  let grad=ctx.createLinearGradient(0,dashTop,0,h);grad.addColorStop(0,'#242d38');grad.addColorStop(.55,'#0c111c');grad.addColorStop(1,'#090b10');
+  ctx.fillStyle=grad;ctx.beginPath();ctx.moveTo(0,h);ctx.lineTo(0,h*.84);ctx.quadraticCurveTo(w*.17,h*.66,w*.39,dashTop);ctx.lineTo(w*.61,dashTop);ctx.quadraticCurveTo(w*.83,h*.66,w,h*.84);ctx.lineTo(w,h);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#6e809277';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,h*.84);ctx.quadraticCurveTo(w*.25,h*.64,w*.45,dashTop);ctx.lineTo(w*.55,dashTop);ctx.quadraticCurveTo(w*.75,h*.64,w,h*.84);ctx.stroke();
+  // Cuadro de instrumentos minimalista.
+  ctx.fillStyle='#080e17';ctx.beginPath();ctx.ellipse(cx,h*.79,w*.15,h*.10,0,0,Math.PI*2);ctx.fill();
+  const speed=Number(S?.model?.speed)||0;
+  const gauge=(gx,gy,rad,value,max,label)=>{
+    ctx.strokeStyle='#344655';ctx.lineWidth=5;ctx.beginPath();ctx.arc(gx,gy,rad,.73*Math.PI,2.27*Math.PI);ctx.stroke();
+    ctx.strokeStyle='#a77afe';ctx.beginPath();ctx.arc(gx,gy,rad,.73*Math.PI,(.73+1.54*Math.min(1,value/max))*Math.PI);ctx.stroke();
+    ctx.fillStyle='#e9eef9';ctx.textAlign='center';ctx.font='bold '+Math.max(11,Math.min(17,w*.021))+'px system-ui';ctx.fillText(label,gx,gy+5);
+  };
+  gauge(cx-w*.075,h*.79,Math.min(w*.045,h*.065),speed,260,Math.round(speed));
+  gauge(cx+w*.075,h*.79,Math.min(w*.045,h*.065),Math.abs(delta),30,Math.abs(delta).toFixed(1)+'°');
+  // Volante giratorio, independientemente de la curvatura visual del camino.
+  ctx.translate(cx,cy);ctx.rotate(steeringAngle);
+  ctx.shadowColor='#000';ctx.shadowBlur=13;
+  ctx.strokeStyle='#070a0e';ctx.lineWidth=Math.max(17,r*.19);ctx.beginPath();ctx.arc(0,0,r,0,2*Math.PI);ctx.stroke();ctx.shadowBlur=0;
+  ctx.strokeStyle='#9baab9';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,r,0,2*Math.PI);ctx.stroke();
+  ctx.fillStyle='#1f2b36';
+  [[-1,0],[1,0],[0,-1]].forEach(([a,b])=>{ctx.save();ctx.rotate(Math.atan2(b,a)+Math.PI/2);ctx.fillRect(-r*.10,-r*.72,r*.20,r*.72);ctx.restore()});
+  ctx.fillStyle='#202834';ctx.beginPath();ctx.arc(0,0,r*.23,0,2*Math.PI);ctx.fill();ctx.strokeStyle='#a9b7ca';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#e84d65';ctx.fillRect(-r*.065,-r-7,r*.13,12);
+  ctx.restore();
+  ctx.textAlign='left';ctx.font='12px system-ui';ctx.fillStyle='#deeafb';ctx.fillText('Volante: '+(steeringAngle*180/Math.PI).toFixed(0)+'°  ·  Dirección de rueda: '+delta.toFixed(1)+'°',13,h-15);
+}
+// Proyecta los puntos sobre la cámara virtual; operación solo visual.
+function paint(){const rect=root.getBoundingClientRect(),w=rect.width,h=rect.height;if(w<4)return;let dpr=window.devicePixelRatio||1;root.width=Math.round(w*dpr);root.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);let H=h*.41;let sky=ctx.createLinearGradient(0,0,0,H);sky.addColorStop(0,'#22354a');sky.addColorStop(1,'#94a9ad');ctx.fillStyle=sky;ctx.fillRect(0,0,w,H);ctx.fillStyle='#263b32';ctx.fillRect(0,H,w,h-H);
+if(!P||!S||!P.ruta){ctx.fillStyle='#e4eafb';ctx.font='14px system-ui';ctx.textAlign='center';ctx.fillText('Esperando la geometría REAL y los ápices optimizados...',w/2,h*.58);ctx.textAlign='start';return}
+const m=S.model||{};let index=Number(m.plan_index);if(!Number.isFinite(index))index=Math.round(P.ruta.length*.10);
+ // D. El plan JSON contiene una vuelta de referencia. La visualización se
+ // puede repetir aunque el conductor siga la ruta extendida de varias vueltas.
+ let i=Math.max(0,Math.min(P.ruta.length-2,((Math.trunc(index)%(P.ruta.length-1))+(P.ruta.length-1))%(P.ruta.length-1)));
+ let pose=(Number.isFinite(Number(m.x))&&Number.isFinite(Number(m.y))&&m.x!=null&&m.y!=null)?[Number(m.x),Number(m.y)]:P.ruta[i];let hd=Number.isFinite(m.heading)?m.heading:Math.atan2(P.ruta[i+1][1]-P.ruta[i][1],P.ruta[i+1][0]-P.ruta[i][0]);let F=(w*.94)/Math.tan((70*Math.PI/180)/2)*Number($('fov').value);let camH=camera==='cockpit'?1.30:1.60,back=camera==='cockpit'?0:7.0;function project(p){let dx=p[0]-pose[0],dy=p[1]-pose[1];let forward=dx*Math.cos(hd)+dy*Math.sin(hd)+back,lat=-dx*Math.sin(hd)+dy*Math.cos(hd);if(forward<1.5)return null;let z=forward+1;return [w/2-lat*F/z,H+camH*F/z,forward]}
+// La pista se dibuja también detrás del eje trasero, sin cortar el asfalto antes del borde inferior.
+ctx.save();ctx.beginPath();ctx.rect(0,H,w,h-H);ctx.clip();
+// Relleno por secciones de la carretera real, de lejos a cerca.
+const left=P.izquierdo||[],right=P.derecho||[],center=P.centro||[];
+for(let k=Math.min(P.ruta.length-3,i+330);k>=Math.max(0,i-95);k--){let a=project(left[k]||P.ruta[k]),b=project(right[k]||P.ruta[k]),c=project(left[k+1]||P.ruta[k+1]),d=project(right[k+1]||P.ruta[k+1]);if(!a||!b||!c||!d)continue;ctx.fillStyle=k%15<8?'#46515a':'#4b545d';ctx.beginPath();ctx.moveTo(...a.slice(0,2));ctx.lineTo(...b.slice(0,2));ctx.lineTo(...d.slice(0,2));ctx.lineTo(...c.slice(0,2));ctx.fill();ctx.strokeStyle='#dce7e9';ctx.lineWidth=Math.max(1,2*F/(a[2]+30));ctx.beginPath();ctx.moveTo(...a.slice(0,2));ctx.lineTo(...c.slice(0,2));ctx.moveTo(...b.slice(0,2));ctx.lineTo(...d.slice(0,2));ctx.stroke();}
+function line(points,color,width){ctx.beginPath();let active=false;for(let k=Math.max(0,i-95);k<Math.min(i+360,points.length);k++){let p=project(points[k]);if(!p)continue;if(!active){ctx.moveTo(p[0],p[1]);active=true}else ctx.lineTo(p[0],p[1]);}ctx.strokeStyle=color;ctx.lineWidth=width;ctx.stroke()}
+line(center,'#ffffff75',1.5);line(P.ruta,'#bd7aff',3);
+ctx.restore();
+// Marca esquemática de bicicleta sobre la carretera, sin carrocería de 4 ruedas.
+if(camera==='cockpit'){drawCockpit(w,h)}else{drawBikeGround(project,pose,hd,w,h);ctx.textAlign='left';ctx.fillStyle='#e4f1ff';ctx.font='12px system-ui';ctx.fillText('Vista exterior · bicicleta de dos ruedas · cámara cercana',13,h-18);}
+}
+async function refresh(){try{S=await(await fetch('/api/state',{cache:'no-store'})).json();if(S.plan_ready&&!planReady){const x=await(await fetch('/api/plan',{cache:'no-store'})).json();if(x.ready){P=x;planReady=true;paramsLoaded=false;actualizarParametros();$('geo').textContent=`Geometría real importada del script original: ${P.ruta.length} puntos · recorrido ${Math.round(P.longitud)} m · tiempo físico del estimador ${Number(P.tiempo_estimado_s).toFixed(2)} s`;}}else if(!S.plan_ready&&planReady){planReady=false;P=null;paramsLoaded=false;$('geo').textContent='Optimizando nueva trayectoria...';}update();paint()}catch(e){$('err').textContent='Sin conexión al servidor Python: '+e.message}}
+setMirrorView($('mirrorView').checked);
+setInterval(refresh,170);window.addEventListener('resize',paint);refresh();
+
+// J. Lectura de parámetros físicos y de PNG producidos por matplotlib.
+let lastGraphsRequest=0, paramsLoaded=false;
+async function actualizarParametros(){
+  try{
+    const res=await fetch('/api/parametros',{cache:'no-store'});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const p=await res.json();
+    if(!p.ready){paramsLoaded=false;$('phys-source').textContent=p.message||'Esperando plan físico...';return;}
+    paramsLoaded=true;
+    $('phys-source').textContent=p.origen||'Parámetros del plan';
+    $('ph-car').textContent=p.automovil||'No disponible';
+    $('ph-tyres').textContent=p.compuesto||'No disponible';
+    $('ph-live-note').textContent=p.origen_automovil||'La sesión LIVE no está disponible';
+    const show=(id,v,unit='',digits=2)=>{$(id).textContent=Number.isFinite(Number(v))&&v!==null&&v!==undefined?Number(v).toFixed(digits)+unit:'—';};
+    show('ph-mass',p.masa_kg,' kg',1);show('ph-weight',p.peso_n,' N',1);
+    show('ph-mu',p.coef_friccion,'',3);show('ph-l',p.distancia_ejes_m,' m',3);
+    show('ph-power',p.potencia_util_kw,' kW',1);
+    show('ph-brake',p.frenado_max_m_s2,' m/s²',2);
+    show('ph-accel',p.aceleracion_max_m_s2,' m/s²',2);
+    show('ph-tpre',p.tiempo_estimado_s,' s',2);
+  }catch(e){$('phys-source').textContent='Parámetros no disponibles: '+e.message;}
+}
+async function actualizarGraficas(forzar=false){
+  if(!forzar && Date.now()-lastGraphsRequest<5500)return;
+  lastGraphsRequest=Date.now();
+  try{
+    const res=await fetch('/api/graficas',{cache:'no-store'});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const g=await res.json();
+    if(g.error)throw new Error(g.error);
+    $('graph-status').textContent=`${g.mensaje} · Python: ${g.muestras_modelo} muestras · Assetto: ${g.muestras_assetto} muestras`;
+    const titles={velocidad_tiempo:'Velocidad frente al tiempo',velocidad_distancia:'Velocidad frente a la distancia',diferencia_velocidad:'Diferencia de velocidad (AC − modelo)',tiempos_vuelta:'Tiempos por vuelta'};
+    const names=Object.keys(titles).filter(k=>g.imagenes&&g.imagenes[k]);
+    const grid=$('graph-grid');
+    for(const key of names){
+      let card=document.getElementById('graph-'+key);
+      if(!card){card=document.createElement('div');card.id='graph-'+key;card.className='graph-card';
+        const h=document.createElement('h3');h.textContent=titles[key];
+        const img=document.createElement('img');img.alt=titles[key];
+        card.append(h,img);grid.append(card);}
+      card.querySelector('img').src=g.imagenes[key];
+    }
+    for(const el of [...grid.children])if(!names.includes(el.id.replace('graph-','')))el.remove();
+  }catch(e){$('graph-status').textContent='No se pudieron crear gráficas: '+e.message;}
+}
+setInterval(()=>{if(!paramsLoaded)actualizarParametros();actualizarGraficas();},6000);
+actualizarParametros();actualizarGraficas(true);
+</script></body></html>
