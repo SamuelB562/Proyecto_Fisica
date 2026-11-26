@@ -1,0 +1,64 @@
+{
+  "lectura_AC": {
+    "automovil": "jw_porsche_991.2_gt2_rs_us",
+    "circuito": "tocancipa",
+    "compuesto": "Hypercar road (HR)",
+    "masa_kg": 1545.0,
+    "distancia_ejes_m": 2.453,
+    "fraccion_peso_delantero": 0.38,
+    "radio_delantero_m": 0.347,
+    "radio_trasero_m": 0.362,
+    "mu_lateral_ref_delantero": 1.3,
+    "mu_lateral_ref_trasero": 1.3,
+    "mu_longitudinal_ref_delantero": 1.315,
+    "mu_longitudinal_ref_trasero": 1.315,
+    "potencia_maxima_telemetria": 504881.96875,
+    "direccion_steer_lock": 400.0,
+    "direccion_steer_ratio": 10.5,
+    "aceleracion_max_m_s2": 6.3527021978021985,
+    "frenado_max_m_s2": 9.933631250000001,
+    "coef_friccion_modelo": 1.23,
+    "origen_friccion": "Frenado en recta: mediana de cinco picos / g; isotropía supuesta",
+    "friccion_medicion": {
+      "mu": 1.2306014271151886,
+      "aceleracion_m_s2": 12.0722,
+      "pico_max_m_s2": 12.1757,
+      "muestras": 60,
+      "cinco_picos_m_s2": [
+        12.1757,
+        12.097,
+        12.0722,
+        12.0614,
+        12.0547
+      ]
+    },
+    "frenado_mecanico_m_s2": 14.70575884008559,
+    "origen_limites": "ensayo único ponderado: resumen_por_velocidad.csv"
+  },
+  "vehiculo": {
+    "masa_kg": 1545.0,
+    "potencia_util_w": 504881.96875,
+    "distancia_ejes_m": 2.453,
+    "largo_m": 4.2,
+    "ancho_m": 1.8,
+    "relacion_direccion": 10.5,
+    "giro_ruedas_max_rad": 0.5235987755982988,
+    "velocidad_giro_ruedas_max_rad_s": 6.283185307179586,
+    "aceleracion_max_m_s2": 6.3527021978021985,
+    "frenado_max_m_s2": 9.933631250000001,
+    "coef_friccion": 1.23
+  },
+  "circuito": "tocancipa",
+  "variante": "2largo_r",
+  "inicio": {
+    "x": -333.21240234375,
+    "y": -65.43930053710938,
+    "psi_rad": 0.8533595959332327,
+    "velocidad_m_s": 0.0,
+    "delta_rad": 0.0
+  },
+  "dt_control": 0.02,
+  "dt_csv": 0.2,
+  "tope_evaluador_m_s": 80.0,
+  "apices_ultima_decision": []
+}

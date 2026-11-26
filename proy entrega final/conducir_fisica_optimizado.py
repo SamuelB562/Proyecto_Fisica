@@ -31,9 +31,9 @@ from leer_parametros_ac import obtener_parametros
 # Punto de partida experimental, no óptimo medido.
 INTERVALO_CONTROL_S = 0.02
 TIEMPO_MAXIMO_S = 450.0  # Límite por vuelta; se escala según cantidad solicitada.
-VUELTAS_PREDETERMINADAS = 3
-PASADAS = 3
-MAX_CURVAS = 20
+VUELTAS_PREDETERMINADAS = 1
+PASADAS = 0
+MAX_CURVAS = 0
 UMBRAL_CURVA = 0.005
 MARGEN_BORDE_M = 0.25
 MEJORA_MINIMA_S = 0.02
@@ -523,7 +523,7 @@ def main(vueltas=None):
             # Los límites provienen de un único origen trazable (CSV o física).
             aceleracion_max_m_s2=p['aceleracion_max_m_s2'],
             frenado_max_m_s2=p['frenado_max_m_s2'],
-            coef_friccion= 1.23
+            coef_friccion= p['coef_friccion_modelo']
         )
         
         print('Optimizando la vuelta completa antes de arrancar...')

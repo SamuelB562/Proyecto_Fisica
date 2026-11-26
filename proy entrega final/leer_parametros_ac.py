@@ -9,6 +9,8 @@ from pathlib import Path
 from configparser import ConfigParser
 import csv  # Estadística ponderada de las muestras experimentales guardadas.
 import re
+import math
+from statistics import median
 
 from telemetria_assetto import (
     Physics, Graphics, Static, conectar, leer
@@ -105,6 +107,34 @@ def limites_experimentales(auto, compuesto):
             acumulados['frenando'][0] / acumulados['frenando'][1])
 
 
+# C2. Adherencia efectiva longitudinal medida durante frenado en recta.
+RUTA_MUESTRAS_FRICCION = RUTA_CALIBRACION.with_name('muestras.csv')
+
+def friccion_experimental(auto, compuesto):
+    """Mediana de las cinco mayores desaceleraciones a pleno freno.
+
+    Reduce la dependencia de un único pico; no es una medición lateral.
+    El círculo de fricción supone isotropía como aproximación explícita.
+    """
+    if auto != AUTO_CALIBRADO or compuesto.strip().lower() != COMPUESTO_CALIBRADO:
+        return None
+    valores = []
+    with RUTA_MUESTRAS_FRICCION.open(encoding='utf-8-sig', newline='') as archivo:
+        for fila in csv.DictReader(archivo):
+            if (fila['tipo'] != 'frenando' or fila['tramo_recto_aprox'] != '1'
+                    or float(fila['freno']) < 0.95):
+                continue
+            a = -float(fila['aceleracion_firmada_m_s2'])
+            if math.isfinite(a) and a > 0:
+                valores.append(a)
+    if len(valores) < 5:
+        raise ValueError('Faltan cinco muestras válidas de frenado en recta')
+    picos = sorted(valores, reverse=True)[:5]
+    a_representativa = median(picos)
+    return dict(mu=a_representativa / 9.81, aceleracion_m_s2=a_representativa,
+                pico_max_m_s2=picos[0], muestras=len(valores), cinco_picos_m_s2=picos)
+
+
 # D. OBTENER LOS PARÁMETROS
 def obtener_parametros():
     """Obtiene parámetros del automóvil activo y estima límites longitudinales simplificados."""
@@ -188,6 +218,14 @@ def obtener_parametros():
             aceleracion_max, frenado_max = experimento
             fuente_limites = f'ensayo único ponderado: {RUTA_CALIBRACION.name}'
 
+        # Usar la medición longitudinal como coeficiente isotrópico efectivo.
+        # No cambiar los límites medios de aceleración y frenado ya calibrados.
+        adherencia = friccion_experimental(auto, compuesto)
+        mu_modelo = mu_lat if adherencia is None else round(adherencia['mu'], 2)
+        origen_mu = ('DY_REF (sin calibración experimental para este compuesto)'
+                     if adherencia is None else
+                     'Frenado en recta: mediana de cinco picos / g; isotropía supuesta')
+
         # G. PARÁMETROS EXTRAÍDOS
         return {
             "automovil": auto,
@@ -233,7 +271,9 @@ def obtener_parametros():
             ),
             "aceleracion_max_m_s2": aceleracion_max,
             "frenado_max_m_s2": frenado_max,
-            "coef_friccion_modelo": mu_lat,
+            "coef_friccion_modelo": mu_modelo,
+            "origen_friccion": origen_mu,
+            "friccion_medicion": adherencia,
             "frenado_mecanico_m_s2": frenado_mecanico,
             "origen_limites": fuente_limites,
         }

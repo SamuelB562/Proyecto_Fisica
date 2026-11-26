@@ -1,0 +1,7 @@
+{
+  "completada": false,
+  "tiempo_s": null,
+  "motivo": "RuntimeError: Sesión no LIVE, boxes o telemetría vencida",
+  "distancia_m": 0.0,
+  "fuera_centro": false
+}
