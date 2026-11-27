@@ -32,8 +32,8 @@ from leer_parametros_ac import obtener_parametros
 INTERVALO_CONTROL_S = 0.02
 TIEMPO_MAXIMO_S = 450.0  # Límite por vuelta; se escala según cantidad solicitada.
 VUELTAS_PREDETERMINADAS = 1
-PASADAS = 0
-MAX_CURVAS = 0
+PASADAS = 2
+MAX_CURVAS = 15
 UMBRAL_CURVA = 0.005
 MARGEN_BORDE_M = 0.25
 MEJORA_MINIMA_S = 0.02
